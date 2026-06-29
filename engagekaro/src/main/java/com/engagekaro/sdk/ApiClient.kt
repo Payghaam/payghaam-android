@@ -21,9 +21,27 @@ internal class ApiClient(private val config: EngageKaroConfig) {
     fun identify(
         externalId: String?,
         tags: Map<String, Any?>? = null,
+        deviceContext: Map<String, Any?>? = null,
     ): JSONObject = post("/users", JSONObject().apply {
         externalId?.let { put("externalId", it) }
         tags?.let { put("tags", JSONObject(it)) }
+        deviceContext?.forEach { (k, v) ->
+            if (v != null) put(k, v)
+        }
+    })
+
+    fun track(
+        name: String,
+        externalId: String?,
+        properties: Map<String, Any?>? = null,
+        deviceContext: Map<String, Any?>? = null,
+    ): JSONObject = post("/events", JSONObject().apply {
+        put("name", name)
+        externalId?.let { put("externalId", it) }
+        properties?.let { put("properties", JSONObject(it)) }
+        deviceContext?.forEach { (k, v) ->
+            if (v != null) put(k, v)
+        }
     })
 
     fun addSubscription(
@@ -43,16 +61,6 @@ internal class ApiClient(private val config: EngageKaroConfig) {
 
     fun updateTags(externalId: String, tags: Map<String, Any?>): JSONObject =
         put("/users/$externalId/tags", JSONObject().apply { put("tags", JSONObject(tags)) })
-
-    fun track(
-        name: String,
-        externalId: String?,
-        properties: Map<String, Any?>? = null,
-    ): JSONObject = post("/events", JSONObject().apply {
-        put("name", name)
-        externalId?.let { put("externalId", it) }
-        properties?.let { put("properties", JSONObject(it)) }
-    })
 
     fun reportReceipt(
         messageId: String,
