@@ -11,6 +11,9 @@ import java.net.URL
 internal class ApiClient(private val config: EngageKaroConfig) {
     var identityHash: String? = null
 
+    /** Installed by EngageKaro.initialize; parks retryable failures offline. */
+    var queue: OfflineQueue? = null
+
     private fun headers(): Map<String, String> = buildMap {
         put("Content-Type", "application/json")
         put("Authorization", "Bearer ${config.apiKey}")
@@ -74,11 +77,33 @@ internal class ApiClient(private val config: EngageKaroConfig) {
         properties?.let { put("properties", JSONObject(it)) }
     })
 
+    // Fire-and-forget path: send now, or park in the offline queue on a
+    // retryable failure so offline activity isn't lost.
     private fun post(path: String, body: JSONObject): JSONObject =
-        request("POST", path, body)
+        sendOrQueue("POST", path, body)
 
     private fun put(path: String, body: JSONObject): JSONObject =
-        request("PUT", path, body)
+        sendOrQueue("PUT", path, body)
+
+    private fun sendOrQueue(method: String, path: String, body: JSONObject): JSONObject {
+        return try {
+            val res = request(method, path, body)
+            queue?.flush()
+            res
+        } catch (t: Throwable) {
+            val q = queue
+            if (q != null && OfflineQueue.isRetryable(t)) {
+                q.enqueue(method, path, body)
+                JSONObject()
+            } else {
+                throw t
+            }
+        }
+    }
+
+    /** Direct request without queueing — used by OfflineQueue's drain. */
+    internal fun rawRequest(method: String, path: String, body: JSONObject): JSONObject =
+        request(method, path, body)
 
     private fun request(method: String, path: String, body: JSONObject): JSONObject {
         val url = URL("${config.apiRoot}$path")

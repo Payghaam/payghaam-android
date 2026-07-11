@@ -50,6 +50,9 @@ object EngageKaro {
         appContext = context.applicationContext
         config = cfg
         api = ApiClient(cfg)
+        api.queue = OfflineQueue(appContext) { method, path, body ->
+            api.rawRequest(method, path, body)
+        }
         consentGiven = !cfg.requireConsent
         externalId = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(KEY_EXTERNAL_ID, null)
@@ -111,7 +114,11 @@ object EngageKaro {
 
     /** Called on app foreground; also wired automatically via activity lifecycle. */
     fun onForeground() {
-        scope.launch { pingDeviceContext(sessionStart = true) }
+        scope.launch {
+            pingDeviceContext(sessionStart = true)
+            // Drain anything queued while the device was offline.
+            runCatching { api.queue?.flush() }
+        }
     }
 
     /** Identify the current user by your backend user id. */
