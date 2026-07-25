@@ -39,6 +39,34 @@ object EngageKaro {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var startedActivities = 0
 
+    /**
+     * Invoked when the user taps a notification, with the full push payload —
+     * your custom `data` keys plus EngageKaro's own `ek_*` keys.
+     *
+     * Set this to route taps yourself:
+     * ```kotlin
+     * EngageKaro.onNotificationOpened = { payload ->
+     *     payload["targetId"]?.let { openOffer(it) }
+     * }
+     * ```
+     * If you leave it null, the SDK opens `ek_url` (the campaign's deep link)
+     * itself. Registering a handler suppresses that — routing becomes yours,
+     * including the deep link, which you can read from `payload["ek_url"]`.
+     *
+     * A tap that lands before you set this is buffered and replayed on assignment,
+     * so a cold start from a notification is never dropped.
+     */
+    var onNotificationOpened: ((Map<String, String>) -> Unit)? = null
+        set(value) {
+            field = value
+            if (value == null) return
+            val buffered = pendingOpened ?: return
+            pendingOpened = null
+            value(buffered)
+        }
+
+    private var pendingOpened: Map<String, String>? = null
+
     val isInitialized: Boolean
         get() = this::config.isInitialized
 
@@ -67,13 +95,25 @@ object EngageKaro {
             override fun onActivityResumed(activity: Activity) {
                 startedActivities++
                 if (startedActivities == 1) onForeground()
+                // Covers the warm path: a singleTop activity gets the tap through
+                // onNewIntent, and only sees it here if the app called setIntent().
+                handleNotificationIntent(activity.intent)
+                // Resume is the earliest point at which the host app's onCreate body
+                // has finished, so it is the first moment we can trust that a null
+                // onNotificationOpened really means "no handler" rather than "not
+                // registered yet". Deciding any earlier would auto-open deep links
+                // out from under apps that do their own routing.
+                flushPendingOpened()
             }
 
             override fun onActivityPaused(activity: Activity) {
                 startedActivities = (startedActivities - 1).coerceAtLeast(0)
             }
 
-            override fun onActivityCreated(a: Activity, b: android.os.Bundle?) {}
+            override fun onActivityCreated(a: Activity, b: android.os.Bundle?) {
+                // Cold start from a notification tap.
+                handleNotificationIntent(a.intent)
+            }
             override fun onActivityStarted(a: Activity) {}
             override fun onActivityStopped(a: Activity) {}
             override fun onActivitySaveInstanceState(a: Activity, b: android.os.Bundle) {}
@@ -110,6 +150,57 @@ object EngageKaro {
         val token = pendingPushToken ?: fetchFcmToken()
         if (token != null) registerPushToken(token)
         pingDeviceContext(sessionStart = true)
+    }
+
+    /**
+     * Feed an Activity intent that may have come from a notification tap.
+     *
+     * The SDK reads the launch intent automatically, but Android delivers taps to
+     * an already-running `singleTop`/`singleTask` activity through `onNewIntent`,
+     * which does not update `getIntent()`. If your launcher activity uses either
+     * mode, forward it:
+     * ```kotlin
+     * override fun onNewIntent(intent: Intent) {
+     *     super.onNewIntent(intent)
+     *     EngageKaro.handleNotificationIntent(intent)
+     * }
+     * ```
+     * Safe to call with any intent — non-EngageKaro ones are ignored, and a given
+     * tap is only ever dispatched once.
+     */
+    fun handleNotificationIntent(intent: android.content.Intent?) {
+        val payload = EngagekaroNotifications.payloadFrom(intent) ?: return
+
+        payload[EngagekaroNotifications.KEY_MESSAGE_ID]?.let { id ->
+            scope.launch { reportPushReceipt(id, "opened", payload) }
+        }
+
+        val handler = onNotificationOpened
+        if (handler != null) {
+            handler(payload)
+        } else {
+            // Hold it: the app may still be mid-onCreate. flushPendingOpened()
+            // settles this on resume.
+            pendingOpened = payload
+        }
+    }
+
+    /** Deliver (or auto-open) a tap that arrived before the app could handle it. */
+    private fun flushPendingOpened() {
+        val payload = pendingOpened ?: return
+        pendingOpened = null
+
+        val handler = onNotificationOpened
+        if (handler != null) {
+            handler(payload)
+            return
+        }
+        // No handler anywhere in the app — fall back to opening the campaign's
+        // deep link so links work with zero integration code.
+        val url = payload[EngagekaroNotifications.KEY_URL]
+        if (!url.isNullOrBlank() && this::appContext.isInitialized) {
+            EngagekaroNotifications.openUrl(appContext, url)
+        }
     }
 
     /** Called on app foreground; also wired automatically via activity lifecycle. */

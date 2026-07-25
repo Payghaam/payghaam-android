@@ -60,9 +60,45 @@ lifecycleScope.launch {
 | `addEmail` / `addSms` | Register channel subscriptions |
 | `registerPushToken(token)` | Manual FCM token registration |
 | `onPushPermissionResult(granted)` | After runtime permission prompt |
+| `onNotificationOpened` | Handler for notification taps |
+| `handleNotificationIntent(intent)` | Forward from `onNewIntent` (singleTop activities) |
+
+## Handling taps and deep links
+
+A campaign's **Deep link URL** arrives as `ek_url`, and anything you pass as `data`
+on `POST /api/notifications` arrives alongside it:
+
+```kotlin
+EngageKaro.onNotificationOpened = { payload ->
+    // payload["ek_url"]   → "myapp://offers/summer"
+    // payload["targetId"] → your own data key
+    payload["targetId"]?.let { openOffer(it) }
+}
+```
+
+If you register **no** handler, the SDK opens `ek_url` itself with `ACTION_VIEW`.
+Registering one suppresses that, so routing — including the deep link — is yours.
+
+If your launcher activity is `singleTop` or `singleTask`, Android delivers taps through
+`onNewIntent`, which does not update `getIntent()`. Forward it:
+
+```kotlin
+override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    EngageKaro.handleNotificationIntent(intent)
+}
+```
+
+Reserved payload keys: `ek_message_id`, `ek_url`, `ek_image`, `ek_sound`, `ek_opened`,
+`title`, `body`.
 
 ## Manifest
 
-The SDK ships `EngagekaroFirebaseMessagingService`. If your app already has an FCM service, forward `onNewToken` / data messages to `EngageKaro` instead of declaring a second service.
+The SDK ships `EngagekaroFirebaseMessagingService`, which draws the notification and
+attaches the tap intent. EngageKaro sends Android pushes **data-only** so this runs in
+every app state — declaring it is required, or nothing is displayed.
+
+If your app already has an FCM service, forward `onNewToken` / data messages to
+`EngageKaro` instead of declaring a second service.
 
 Upload the FCM **service account JSON** in the dashboard (Channels → Android · FCM).
