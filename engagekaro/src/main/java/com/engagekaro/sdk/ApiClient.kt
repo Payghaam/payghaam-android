@@ -1,5 +1,6 @@
 package com.engagekaro.sdk
 
+import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -7,7 +8,7 @@ import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 
-/** Thin REST client for `/api/sdk/*` endpoints. */
+/** Thin REST client for the `/api/sdk` endpoints. */
 internal class ApiClient(private val config: EngageKaroConfig) {
     var identityHash: String? = null
 
@@ -93,9 +94,15 @@ internal class ApiClient(private val config: EngageKaroConfig) {
         } catch (t: Throwable) {
             val q = queue
             if (q != null && OfflineQueue.isRetryable(t)) {
+                // Silently parked by design (fire-and-forget), but that also
+                // means this is the ONLY place a caller ever finds out —
+                // nothing else logs or surfaces this. Filter logcat by tag
+                // "EngageKaro" when a call seems to vanish.
+                Log.w("EngageKaro", "$method ${config.apiRoot}$path failed, queued for retry: $t")
                 q.enqueue(method, path, body)
                 JSONObject()
             } else {
+                Log.e("EngageKaro", "$method ${config.apiRoot}$path failed (non-retryable): $t")
                 throw t
             }
         }

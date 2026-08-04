@@ -24,15 +24,7 @@ class EngagekaroFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
-        val data = message.data
-
-        // Draw first: the receipt is best-effort and must never cost the user the
-        // notification (it is skipped entirely when the SDK is uninitialized).
-        EngagekaroNotifications.show(this, message)
-
-        val messageId = data[EngagekaroNotifications.KEY_MESSAGE_ID] ?: return
-        scope.launch {
-            EngageKaro.reportPushReceipt(messageId, "delivered", data)
-        }
+        // Draws the notification and reports `delivered` — see EngageKaro.handleRemoteMessage.
+        EngageKaro.handleRemoteMessage(this, message)
     }
 }

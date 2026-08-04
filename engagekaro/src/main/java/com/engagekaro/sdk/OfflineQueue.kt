@@ -1,6 +1,7 @@
 package com.engagekaro.sdk
 
 import android.content.Context
+import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -67,6 +68,7 @@ internal class OfflineQueue(
         )
         while (ops.size > MAX_QUEUE) ops.removeAt(0)
         save(ops)
+        Log.w("EngageKaro", "queued $method $path (queue depth now ${ops.size})")
     }
 
     /**
@@ -80,10 +82,17 @@ internal class OfflineQueue(
             while (true) {
                 val ops = load()
                 val op = ops.firstOrNull() ?: return
+                val method = op.getString("method")
+                val path = op.getString("path")
                 try {
-                    sender(op.getString("method"), op.getString("path"), op.getJSONObject("body"))
+                    sender(method, path, op.getJSONObject("body"))
+                    Log.i("EngageKaro", "drained queued $method $path")
                 } catch (t: Throwable) {
-                    if (isRetryable(t)) return // still offline — retry later
+                    if (isRetryable(t)) {
+                        Log.w("EngageKaro", "still offline, keeping queued $method $path: $t")
+                        return // still offline — retry later
+                    }
+                    Log.e("EngageKaro", "dropping permanently-rejected $method $path: $t")
                     // permanently rejected: fall through and drop
                 }
                 val after = load()

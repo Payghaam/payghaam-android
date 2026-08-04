@@ -8,11 +8,13 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 import com.google.firebase.messaging.FirebaseMessaging
+import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 
 /**
  * EngageKaro Android SDK — identify users, register FCM tokens, tags, and events.
@@ -75,6 +77,19 @@ object EngageKaro {
 
     /** Call once from [Application.onCreate] or your main Activity. */
     fun initialize(context: Context, cfg: EngageKaroConfig) {
+        setupCore(context, cfg)
+        registerForegroundTracking(appContext)
+    }
+
+    /**
+     * The state [initialize] sets up, minus activity-lifecycle registration and
+     * automatic tap/deep-link dispatch. Used directly by [persistBridgeConfig] and
+     * [restoreIfNeeded]: wrapper SDKs (Flutter, React Native) already have their own
+     * platform-idiomatic tap handling and foreground/session tracking on the Dart/JS
+     * side, so registering this class's copy too would double-dispatch taps and
+     * double-report device-context pings.
+     */
+    private fun setupCore(context: Context, cfg: EngageKaroConfig) {
         appContext = context.applicationContext
         config = cfg
         api = ApiClient(cfg)
@@ -86,7 +101,6 @@ object EngageKaro {
             .getString(KEY_EXTERNAL_ID, null)
         PushDeliveryBridge.externalIdProvider = { externalId }
         PushDeliveryBridge.apiClientProvider = { if (canSend) api else null }
-        registerForegroundTracking(appContext)
     }
 
     private fun registerForegroundTracking(context: Context) {
@@ -285,7 +299,8 @@ object EngageKaro {
         pendingPushToken = null
     }
 
-    internal suspend fun reportPushReceipt(
+    /** Report a push delivery/engagement receipt (delivered | opened | clicked). */
+    suspend fun reportPushReceipt(
         messageId: String,
         event: String,
         properties: Map<String, Any?>? = null,
@@ -300,8 +315,144 @@ object EngageKaro {
         null
     }
 
+    // ── Cross-platform wrapper support (Flutter, React Native) ─────────────────
+    //
+    // Those SDKs run their own JavaScript/Dart-level `initialize()` and never call
+    // this class's `initialize()` directly, so `isInitialized` is normally false in
+    // a process wrapper apps run. But FCM can still start that process solely to
+    // deliver a push, with no Dart/JS engine alive to handle it — the messaging
+    // service (running here, in plain Kotlin, regardless of wrapper) is the only
+    // code that runs. `persistBridgeConfig`/`restoreIfNeeded` let a wrapper's own
+    // native bridge (its "shareConfig" method channel handler) hand just enough
+    // config to this class so headless delivery can still be reported, without the
+    // wrapper's FCM service reimplementing the HTTP client itself. See
+    // sdk-native-wrapper-design.md.
+
+    /**
+     * Called by a wrapper SDK's own native bridge (not host apps directly) whenever
+     * its JS/Dart layer shares config for headless operation. Safe to call
+     * repeatedly — e.g. once per `login()` to keep `externalId` current.
+     */
+    fun persistBridgeConfig(
+        context: Context,
+        apiKey: String,
+        baseUrl: String,
+        externalId: String?,
+        identityHash: String? = null,
+    ) {
+        val ctx = context.applicationContext
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().apply {
+            putString(KEY_CFG_API_KEY, apiKey)
+            putString(KEY_CFG_BASE_URL, baseUrl)
+            if (externalId != null) putString(KEY_EXTERNAL_ID, externalId)
+        }.apply()
+
+        if (!isInitialized) {
+            setupCore(ctx, EngageKaroConfig(appId = "", apiKey = apiKey, baseUrl = baseUrl))
+        }
+        if (externalId != null) this.externalId = externalId
+        if (identityHash != null) api.identityHash = identityHash
+    }
+
+    /**
+     * Rehydrates from a [persistBridgeConfig] snapshot if this process was never
+     * `initialize()`d — e.g. a Flutter/RN app woken solely by FCM. Returns true if
+     * already initialized or if it just restored; false if there is nothing to
+     * restore (the wrapper's `shareConfig` was never called).
+     */
+    fun restoreIfNeeded(context: Context): Boolean {
+        if (isInitialized) return true
+        val ctx = context.applicationContext
+        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val apiKey = prefs.getString(KEY_CFG_API_KEY, null) ?: return false
+        val baseUrl = prefs.getString(KEY_CFG_BASE_URL, null) ?: return false
+        setupCore(ctx, EngageKaroConfig(appId = "", apiKey = apiKey, baseUrl = baseUrl))
+        return true
+    }
+
+    /**
+     * Clears the identity [persistBridgeConfig] set — call from a wrapper's
+     * `logout()`. [persistBridgeConfig] only ever *sets* `externalId` (so a
+     * repeated call can't accidentally wipe it); this is the explicit clear path.
+     */
+    fun clearBridgeIdentity(context: Context) {
+        externalId = null
+        if (this::api.isInitialized) api.identityHash = null
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().remove(KEY_EXTERNAL_ID).apply()
+    }
+
+    // ── Cross-platform wrapper support: raw API pass-through ───────────────────
+    //
+    // Phase 2 of the wrapper refactor (see sdk-native-wrapper-design.md §4.5):
+    // sdks/flutter and sdks/react-native used to ship their own HTTP clients and
+    // offline queues in Dart/JS, duplicating everything below a third and fourth
+    // time. These proxy a single call through the canonical `api` (+ its offline
+    // queue) with none of `login()`'s own session-ping/token-registration side
+    // effects — the wrapper's Dart/JS layer already owns that orchestration (tap
+    // dispatch, deep-link fallback, foreground session timing) and calls these
+    // only for the network leg. Requires [persistBridgeConfig] to have run first.
+
+    /** Raw identify call — the wrapper's own device-context snapshot goes in [deviceContext]. */
+    suspend fun bridgeIdentify(deviceContext: Map<String, Any?>? = null) {
+        if (!canSend) return
+        withContext(Dispatchers.IO) { api.identify(externalId, deviceContext = deviceContext) }
+    }
+
+    /** Generic channel subscription (push token, email, SMS) for the current user. */
+    suspend fun bridgeAddSubscription(
+        type: SubscriptionType,
+        token: String,
+        deviceModel: String? = null,
+        deviceOs: String? = null,
+        appVersion: String? = null,
+    ) {
+        if (!canSend) return
+        val id = externalId ?: return
+        withContext(Dispatchers.IO) {
+            api.addSubscription(id, type, token, deviceModel, deviceOs, appVersion)
+        }
+    }
+
+    /** Drains anything the offline queue accumulated. Safe to call repeatedly. */
+    suspend fun bridgeFlushQueue() {
+        if (!this::api.isInitialized) return
+        withContext(Dispatchers.IO) { runCatching { api.queue?.flush() } }
+    }
+
+    /**
+     * Optional hook for wrapper SDKs to forward a push's raw data payload to their
+     * own runtime (e.g. Dart's `onForeground` stream), mirroring
+     * [onNotificationOpened]. The bundled native [EngagekaroFirebaseMessagingService]
+     * does not need this — it is only for cross-platform wrappers.
+     */
+    var onMessageReceivedHook: ((Map<String, String>) -> Unit)? = null
+
+    /** Draws the tray notification for [message], with no receipt reporting. */
+    fun showNotification(context: Context, message: RemoteMessage) {
+        EngagekaroNotifications.show(context, message)
+    }
+
+    /**
+     * Full handling for an FCM [message]: draws the notification and reports a
+     * `delivered` receipt, then calls [onMessageReceivedHook] if one is set. This is
+     * what the bundled [EngagekaroFirebaseMessagingService] does; wrapper SDKs whose
+     * own FCM service subclass wants the same behavior (rather than just
+     * [showNotification]) should call [restoreIfNeeded] first, then this.
+     */
+    fun handleRemoteMessage(context: Context, message: RemoteMessage) {
+        showNotification(context, message)
+        val messageId = message.data[EngagekaroNotifications.KEY_MESSAGE_ID]
+        if (messageId != null) {
+            scope.launch { reportPushReceipt(messageId, "delivered", message.data) }
+        }
+        onMessageReceivedHook?.invoke(message.data)
+    }
+
     private const val PREFS = "engagekaro_sdk"
     private const val KEY_EXTERNAL_ID = "external_id"
+    private const val KEY_CFG_API_KEY = "cfg_api_key"
+    private const val KEY_CFG_BASE_URL = "cfg_base_url"
 }
 
 /** Hooks used by [EngagekaroFirebaseMessagingService] for receipts. */
