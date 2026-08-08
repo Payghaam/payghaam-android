@@ -1,0 +1,26 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      # No committed Gradle wrapper yet (this module was always built through a
+      # consuming app's own wrapper via composite build). setup-gradle
+      # provisions a pinned Gradle version directly instead — run
+      # `gradle wrapper` locally and commit the result if you'd rather use
+      # ./gradlew (recommended before publishing, so consumers get a
+      # reproducible, verified wrapper too).
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+      - run: gradle :payghaam:assembleDebug :payghaam:testDebugUnitTest

@@ -1,5 +1,14 @@
 # Machine-specific Android SDK path — required so this module resolves as
-# an included build (see sdks/android/local.properties and the comment in
-# sdks/android/settings.gradle.kts), but must not be committed since the
-# path differs per developer machine.
+# an included build for consumers doing local composite-build development,
+# but must not be committed since the path differs per developer machine.
 local.properties
+
+*.iml
+.gradle/
+/local.properties
+.idea/
+.DS_Store
+build/
+/captures
+.externalNativeBuild
+.cxx
