@@ -2,13 +2,17 @@ plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
     // Publishes to Maven Central via the Central Publisher Portal. Pinned to
-    // 0.35.0, NOT the latest release — 0.36.0+ raises the plugin's own minimum
-    // required AGP (8.13.0) and Kotlin (2.2.0), which conflicts with this
-    // module's own AGP 8.9.1 / Kotlin 2.0.21 cap (see build.gradle.kts at the
-    // repo root for why those are capped — React Native's Gradle Plugin breaks
-    // above Kotlin ~2.0.x). 0.35.0's own minimums (AGP 8.2.2, Kotlin 1.9.20)
-    // fit inside that cap.
-    id("com.vanniktech.maven.publish") version "0.35.0"
+    // 0.34.0, NOT latest — 0.36.0+ raises the plugin's own minimum AGP
+    // (8.13.0) and Kotlin (2.2.0) above this module's deliberate AGP 8.9.1 /
+    // Kotlin 2.0.21 cap (React Native's Gradle Plugin breaks above Kotlin
+    // ~2.0.x — see build.gradle.kts at the repo root). 0.35.0 was tried first
+    // and also rejected: its own minimum Gradle version is 8.13
+    // (publishToMavenCentral() calls a ProjectLayout API that doesn't exist
+    // before that), which would have meant bumping CI's Gradle past the 8.12
+    // already confirmed working with AGP 8.9.1 elsewhere in this project.
+    // 0.34.0's floor (Gradle 8.5, AGP 8.0.0, Kotlin 1.9.20) fits comfortably
+    // under both constraints without moving either one.
+    id("com.vanniktech.maven.publish") version "0.34.0"
 }
 
 // Stable coordinates so wrapper SDKs (Flutter, React Native) can depend on this
