@@ -1,11 +1,19 @@
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
+    // Publishes to Maven Central via the Central Publisher Portal. Pinned to
+    // 0.35.0, NOT the latest release — 0.36.0+ raises the plugin's own minimum
+    // required AGP (8.13.0) and Kotlin (2.2.0), which conflicts with this
+    // module's own AGP 8.9.1 / Kotlin 2.0.21 cap (see build.gradle.kts at the
+    // repo root for why those are capped — React Native's Gradle Plugin breaks
+    // above Kotlin ~2.0.x). 0.35.0's own minimums (AGP 8.2.2, Kotlin 1.9.20)
+    // fit inside that cap.
+    id("com.vanniktech.maven.publish") version "0.35.0"
 }
 
 // Stable coordinates so wrapper SDKs (Flutter, React Native) can depend on this
-// module via a Gradle composite build without knowing its local file path — see
-// sdk-native-wrapper-design.md.
+// module via a Gradle composite build (local dev) or Maven Central (published)
+// without knowing its local file path.
 group = "com.payghaam"
 version = "0.1.0"
 
@@ -44,4 +52,43 @@ dependencies {
     // WakeLockHolder) needs at RUNTIME to wake the app for a data-only push
     // when backgrounded/killed — excluding it compiles fine but breaks exactly
     // the delivery path this SDK relies on (NoClassDefFoundError at runtime).
+}
+
+// Maven Central publishing. Credentials/signing come from env vars in CI (see
+// .github/workflows/publish.yml) or ~/.gradle/gradle.properties locally — never
+// hardcode them here. The plugin reads ORG_GRADLE_PROJECT_mavenCentralUsername,
+// ORG_GRADLE_PROJECT_mavenCentralPassword (a Central Portal user token, from
+// central.sonatype.com/account), ORG_GRADLE_PROJECT_signingInMemoryKey,
+// ORG_GRADLE_PROJECT_signingInMemoryKeyId, and
+// ORG_GRADLE_PROJECT_signingInMemoryKeyPassword automatically — nothing else
+// needed here for credentials.
+mavenPublishing {
+    publishToMavenCentral()
+    signAllPublications()
+
+    coordinates("com.payghaam", "payghaam", version.toString())
+
+    pom {
+        name.set("Payghaam Android SDK")
+        description.set("Payghaam Android SDK — direct FCM push, identify, tags, events.")
+        url.set("https://github.com/Payghaam/payghaam-android")
+        licenses {
+            license {
+                name.set("MIT")
+                url.set("https://github.com/Payghaam/payghaam-android/blob/main/LICENSE")
+            }
+        }
+        developers {
+            developer {
+                id.set("payghaam")
+                name.set("Payghaam")
+                email.set("dev@payghaam.com")
+            }
+        }
+        scm {
+            url.set("https://github.com/Payghaam/payghaam-android")
+            connection.set("scm:git:https://github.com/Payghaam/payghaam-android.git")
+            developerConnection.set("scm:git:ssh://git@github.com/Payghaam/payghaam-android.git")
+        }
+    }
 }

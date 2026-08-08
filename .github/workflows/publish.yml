@@ -1,0 +1,31 @@
+name: Publish
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+      # Secrets required in this repo's Settings -> Secrets and variables ->
+      # Actions (see RELEASING.md for how to get each one):
+      #   MAVEN_CENTRAL_USERNAME, MAVEN_CENTRAL_PASSWORD  — Central Portal user token
+      #   SIGNING_IN_MEMORY_KEY, SIGNING_IN_MEMORY_KEY_ID  — GPG key for signing artifacts
+      #   SIGNING_IN_MEMORY_KEY_PASSWORD                    — that key's passphrase
+      - run: gradle :payghaam:publish --no-configuration-cache
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_IN_MEMORY_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.SIGNING_IN_MEMORY_KEY_ID }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
