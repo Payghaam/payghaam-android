@@ -1,4 +1,4 @@
-package com.engagekaro.sdk
+package com.payghaam.sdk
 
 import android.content.Context
 import android.util.Log
@@ -16,7 +16,7 @@ internal class OfflineQueue(
     context: Context,
     private val sender: (method: String, path: String, body: JSONObject) -> Unit,
 ) {
-    private val prefs = context.getSharedPreferences("engagekaro_queue", Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences("payghaam_queue", Context.MODE_PRIVATE)
 
     @Volatile
     private var flushing = false
@@ -28,7 +28,7 @@ internal class OfflineQueue(
 
         /** 4xx (except 408/429) will never be accepted; everything else retries. */
         fun isRetryable(t: Throwable): Boolean = when (t) {
-            is EngageKaroApiException ->
+            is PayghaamApiException ->
                 t.statusCode == 408 || t.statusCode == 429 || t.statusCode >= 500
             is IOException -> true
             else -> true
@@ -68,7 +68,7 @@ internal class OfflineQueue(
         )
         while (ops.size > MAX_QUEUE) ops.removeAt(0)
         save(ops)
-        Log.w("EngageKaro", "queued $method $path (queue depth now ${ops.size})")
+        Log.w("Payghaam", "queued $method $path (queue depth now ${ops.size})")
     }
 
     /**
@@ -86,13 +86,13 @@ internal class OfflineQueue(
                 val path = op.getString("path")
                 try {
                     sender(method, path, op.getJSONObject("body"))
-                    Log.i("EngageKaro", "drained queued $method $path")
+                    Log.i("Payghaam", "drained queued $method $path")
                 } catch (t: Throwable) {
                     if (isRetryable(t)) {
-                        Log.w("EngageKaro", "still offline, keeping queued $method $path: $t")
+                        Log.w("Payghaam", "still offline, keeping queued $method $path: $t")
                         return // still offline — retry later
                     }
-                    Log.e("EngageKaro", "dropping permanently-rejected $method $path: $t")
+                    Log.e("Payghaam", "dropping permanently-rejected $method $path: $t")
                     // permanently rejected: fall through and drop
                 }
                 val after = load()

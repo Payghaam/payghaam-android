@@ -1,4 +1,4 @@
-# EngageKaro Android SDK
+# Payghaam Android SDK
 
 Native Kotlin SDK for Android — FCM push, user identity, tags, and events.
 
@@ -12,7 +12,7 @@ includeBuild("../sdks/android") // or publish to Maven
 
 // app/build.gradle.kts
 dependencies {
-    implementation(project(":engagekaro"))
+    implementation(project(":payghaam"))
     implementation(platform("com.google.firebase:firebase-bom:33.5.1"))
 }
 ```
@@ -25,9 +25,9 @@ Apply Google services and add `google-services.json` (see [Flutter Android setup
 class MyApp : Application() {
     override fun onCreate() {
         super.onCreate()
-        EngageKaro.initialize(
+        Payghaam.initialize(
             this,
-            EngageKaroConfig(
+            PayghaamConfig(
                 appId = "YOUR_PROJECT_ID",
                 apiKey = "ek_client_...",
                 baseUrl = "https://api.yourhost.com",
@@ -38,13 +38,13 @@ class MyApp : Application() {
 
 // Activity — after user signs in:
 lifecycleScope.launch {
-    EngageKaro.login("user-123")
+    Payghaam.login("user-123")
     if (Build.VERSION.SDK_INT >= 33) {
         requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
     } else {
-        EngageKaro.onPushPermissionResult(true)
+        Payghaam.onPushPermissionResult(true)
     }
-    EngageKaro.trackEvent("app_open")
+    Payghaam.trackEvent("app_open")
 }
 ```
 
@@ -69,7 +69,7 @@ A campaign's **Deep link URL** arrives as `ek_url`, and anything you pass as `da
 on `POST /api/notifications` arrives alongside it:
 
 ```kotlin
-EngageKaro.onNotificationOpened = { payload ->
+Payghaam.onNotificationOpened = { payload ->
     // payload["ek_url"]   → "myapp://offers/summer"
     // payload["targetId"] → your own data key
     payload["targetId"]?.let { openOffer(it) }
@@ -85,7 +85,7 @@ If your launcher activity is `singleTop` or `singleTask`, Android delivers taps 
 ```kotlin
 override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
-    EngageKaro.handleNotificationIntent(intent)
+    Payghaam.handleNotificationIntent(intent)
 }
 ```
 
@@ -94,11 +94,11 @@ Reserved payload keys: `ek_message_id`, `ek_url`, `ek_image`, `ek_sound`, `ek_op
 
 ## Manifest
 
-The SDK ships `EngagekaroFirebaseMessagingService`, which draws the notification and
-attaches the tap intent. EngageKaro sends Android pushes **data-only** so this runs in
+The SDK ships `PayghaamFirebaseMessagingService`, which draws the notification and
+attaches the tap intent. Payghaam sends Android pushes **data-only** so this runs in
 every app state — declaring it is required, or nothing is displayed.
 
 If your app already has an FCM service, forward `onNewToken` / data messages to
-`EngageKaro` instead of declaring a second service.
+`Payghaam` instead of declaring a second service.
 
 Upload the FCM **service account JSON** in the dashboard (Channels → Android · FCM).

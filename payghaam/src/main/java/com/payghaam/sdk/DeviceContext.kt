@@ -1,4 +1,4 @@
-package com.engagekaro.sdk
+package com.payghaam.sdk
 
 import android.content.Context
 import android.os.Build

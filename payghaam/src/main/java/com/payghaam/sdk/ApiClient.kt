@@ -1,4 +1,4 @@
-package com.engagekaro.sdk
+package com.payghaam.sdk
 
 import android.util.Log
 import org.json.JSONArray
@@ -9,17 +9,17 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /** Thin REST client for the `/api/sdk` endpoints. */
-internal class ApiClient(private val config: EngageKaroConfig) {
+internal class ApiClient(private val config: PayghaamConfig) {
     var identityHash: String? = null
 
-    /** Installed by EngageKaro.initialize; parks retryable failures offline. */
+    /** Installed by Payghaam.initialize; parks retryable failures offline. */
     var queue: OfflineQueue? = null
 
     private fun headers(): Map<String, String> = buildMap {
         put("Content-Type", "application/json")
         put("Authorization", "Bearer ${config.apiKey}")
         put("X-Api-Key", config.apiKey)
-        identityHash?.let { put("X-Engagekaro-Identity-Hash", it) }
+        identityHash?.let { put("X-Payghaam-Identity-Hash", it) }
     }
 
     fun identify(
@@ -97,12 +97,12 @@ internal class ApiClient(private val config: EngageKaroConfig) {
                 // Silently parked by design (fire-and-forget), but that also
                 // means this is the ONLY place a caller ever finds out —
                 // nothing else logs or surfaces this. Filter logcat by tag
-                // "EngageKaro" when a call seems to vanish.
-                Log.w("EngageKaro", "$method ${config.apiRoot}$path failed, queued for retry: $t")
+                // "Payghaam" when a call seems to vanish.
+                Log.w("Payghaam", "$method ${config.apiRoot}$path failed, queued for retry: $t")
                 q.enqueue(method, path, body)
                 JSONObject()
             } else {
-                Log.e("EngageKaro", "$method ${config.apiRoot}$path failed (non-retryable): $t")
+                Log.e("Payghaam", "$method ${config.apiRoot}$path failed (non-retryable): $t")
                 throw t
             }
         }
@@ -125,7 +125,7 @@ internal class ApiClient(private val config: EngageKaroConfig) {
         val code = conn.responseCode
         val stream = if (code in 200..299) conn.inputStream else conn.errorStream
         val text = stream?.bufferedReader()?.use(BufferedReader::readText) ?: ""
-        if (code !in 200..299) throw EngageKaroApiException(code, text)
+        if (code !in 200..299) throw PayghaamApiException(code, text)
         return if (text.isBlank()) JSONObject() else JSONObject(text)
     }
 }

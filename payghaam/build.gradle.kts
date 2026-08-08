@@ -6,11 +6,11 @@ plugins {
 // Stable coordinates so wrapper SDKs (Flutter, React Native) can depend on this
 // module via a Gradle composite build without knowing its local file path — see
 // sdk-native-wrapper-design.md.
-group = "com.engagekaro"
+group = "com.payghaam"
 version = "0.1.0"
 
 android {
-    namespace = "com.engagekaro.sdk"
+    namespace = "com.payghaam.sdk"
     compileSdk = 34
 
     defaultConfig {
@@ -26,11 +26,11 @@ android {
 }
 
 dependencies {
-    // `api`, not `implementation` — both the Flutter (engagekaro_flutter) and
+    // `api`, not `implementation` — both the Flutter (payghaam_flutter) and
     // React Native Android wrapper modules import FirebaseMessagingService /
     // RemoteMessage and kotlinx.coroutines types directly in their own Kotlin
     // sources, relying on these being visible transitively through their
-    // `implementation "com.engagekaro:engagekaro"` dependency. `implementation`
+    // `implementation "com.payghaam:payghaam"` dependency. `implementation`
     // here would hide them from those consumers ("Unresolved reference
     // 'google'"/'FirebaseMessaging'` etc. at compile time).
     api("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")

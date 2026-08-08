@@ -1,4 +1,4 @@
-package com.engagekaro.sdk
+package com.payghaam.sdk
 
 import android.Manifest
 import android.app.Activity
@@ -17,21 +17,21 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
 /**
- * EngageKaro Android SDK — identify users, register FCM tokens, tags, and events.
+ * Payghaam Android SDK — identify users, register FCM tokens, tags, and events.
  *
  * ```kotlin
- * EngageKaro.initialize(
+ * Payghaam.initialize(
  *     applicationContext,
- *     EngageKaroConfig(appId = "...", apiKey = "ek_client_...", baseUrl = "https://api.host"),
+ *     PayghaamConfig(appId = "...", apiKey = "ek_client_...", baseUrl = "https://api.host"),
  * )
- * EngageKaro.login("user-123")
- * EngageKaro.requestPushPermission(activity)
- * EngageKaro.trackEvent("purchase", mapOf("sku" to "x"))
+ * Payghaam.login("user-123")
+ * Payghaam.requestPushPermission(activity)
+ * Payghaam.trackEvent("purchase", mapOf("sku" to "x"))
  * ```
  */
-object EngageKaro {
+object Payghaam {
     private lateinit var appContext: Context
-    private lateinit var config: EngageKaroConfig
+    private lateinit var config: PayghaamConfig
     private lateinit var api: ApiClient
 
     private var externalId: String? = null
@@ -43,11 +43,11 @@ object EngageKaro {
 
     /**
      * Invoked when the user taps a notification, with the full push payload —
-     * your custom `data` keys plus EngageKaro's own `ek_*` keys.
+     * your custom `data` keys plus Payghaam's own `ek_*` keys.
      *
      * Set this to route taps yourself:
      * ```kotlin
-     * EngageKaro.onNotificationOpened = { payload ->
+     * Payghaam.onNotificationOpened = { payload ->
      *     payload["targetId"]?.let { openOffer(it) }
      * }
      * ```
@@ -76,7 +76,7 @@ object EngageKaro {
         get() = isInitialized && (!config.requireConsent || consentGiven)
 
     /** Call once from [Application.onCreate] or your main Activity. */
-    fun initialize(context: Context, cfg: EngageKaroConfig) {
+    fun initialize(context: Context, cfg: PayghaamConfig) {
         setupCore(context, cfg)
         registerForegroundTracking(appContext)
     }
@@ -89,7 +89,7 @@ object EngageKaro {
      * side, so registering this class's copy too would double-dispatch taps and
      * double-report device-context pings.
      */
-    private fun setupCore(context: Context, cfg: EngageKaroConfig) {
+    private fun setupCore(context: Context, cfg: PayghaamConfig) {
         appContext = context.applicationContext
         config = cfg
         api = ApiClient(cfg)
@@ -176,16 +176,16 @@ object EngageKaro {
      * ```kotlin
      * override fun onNewIntent(intent: Intent) {
      *     super.onNewIntent(intent)
-     *     EngageKaro.handleNotificationIntent(intent)
+     *     Payghaam.handleNotificationIntent(intent)
      * }
      * ```
-     * Safe to call with any intent — non-EngageKaro ones are ignored, and a given
+     * Safe to call with any intent — non-Payghaam ones are ignored, and a given
      * tap is only ever dispatched once.
      */
     fun handleNotificationIntent(intent: android.content.Intent?) {
-        val payload = EngagekaroNotifications.payloadFrom(intent) ?: return
+        val payload = PayghaamNotifications.payloadFrom(intent) ?: return
 
-        payload[EngagekaroNotifications.KEY_MESSAGE_ID]?.let { id ->
+        payload[PayghaamNotifications.KEY_MESSAGE_ID]?.let { id ->
             scope.launch { reportPushReceipt(id, "opened", payload) }
         }
 
@@ -211,9 +211,9 @@ object EngageKaro {
         }
         // No handler anywhere in the app — fall back to opening the campaign's
         // deep link so links work with zero integration code.
-        val url = payload[EngagekaroNotifications.KEY_URL]
+        val url = payload[PayghaamNotifications.KEY_URL]
         if (!url.isNullOrBlank() && this::appContext.isInitialized) {
-            EngagekaroNotifications.openUrl(appContext, url)
+            PayghaamNotifications.openUrl(appContext, url)
         }
     }
 
@@ -348,7 +348,7 @@ object EngageKaro {
         }.apply()
 
         if (!isInitialized) {
-            setupCore(ctx, EngageKaroConfig(appId = "", apiKey = apiKey, baseUrl = baseUrl))
+            setupCore(ctx, PayghaamConfig(appId = "", apiKey = apiKey, baseUrl = baseUrl))
         }
         if (externalId != null) this.externalId = externalId
         if (identityHash != null) api.identityHash = identityHash
@@ -366,7 +366,7 @@ object EngageKaro {
         val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val apiKey = prefs.getString(KEY_CFG_API_KEY, null) ?: return false
         val baseUrl = prefs.getString(KEY_CFG_BASE_URL, null) ?: return false
-        setupCore(ctx, EngageKaroConfig(appId = "", apiKey = apiKey, baseUrl = baseUrl))
+        setupCore(ctx, PayghaamConfig(appId = "", apiKey = apiKey, baseUrl = baseUrl))
         return true
     }
 
@@ -423,39 +423,39 @@ object EngageKaro {
     /**
      * Optional hook for wrapper SDKs to forward a push's raw data payload to their
      * own runtime (e.g. Dart's `onForeground` stream), mirroring
-     * [onNotificationOpened]. The bundled native [EngagekaroFirebaseMessagingService]
+     * [onNotificationOpened]. The bundled native [PayghaamFirebaseMessagingService]
      * does not need this — it is only for cross-platform wrappers.
      */
     var onMessageReceivedHook: ((Map<String, String>) -> Unit)? = null
 
     /** Draws the tray notification for [message], with no receipt reporting. */
     fun showNotification(context: Context, message: RemoteMessage) {
-        EngagekaroNotifications.show(context, message)
+        PayghaamNotifications.show(context, message)
     }
 
     /**
      * Full handling for an FCM [message]: draws the notification and reports a
      * `delivered` receipt, then calls [onMessageReceivedHook] if one is set. This is
-     * what the bundled [EngagekaroFirebaseMessagingService] does; wrapper SDKs whose
+     * what the bundled [PayghaamFirebaseMessagingService] does; wrapper SDKs whose
      * own FCM service subclass wants the same behavior (rather than just
      * [showNotification]) should call [restoreIfNeeded] first, then this.
      */
     fun handleRemoteMessage(context: Context, message: RemoteMessage) {
         showNotification(context, message)
-        val messageId = message.data[EngagekaroNotifications.KEY_MESSAGE_ID]
+        val messageId = message.data[PayghaamNotifications.KEY_MESSAGE_ID]
         if (messageId != null) {
             scope.launch { reportPushReceipt(messageId, "delivered", message.data) }
         }
         onMessageReceivedHook?.invoke(message.data)
     }
 
-    private const val PREFS = "engagekaro_sdk"
+    private const val PREFS = "payghaam_sdk"
     private const val KEY_EXTERNAL_ID = "external_id"
     private const val KEY_CFG_API_KEY = "cfg_api_key"
     private const val KEY_CFG_BASE_URL = "cfg_base_url"
 }
 
-/** Hooks used by [EngagekaroFirebaseMessagingService] for receipts. */
+/** Hooks used by [PayghaamFirebaseMessagingService] for receipts. */
 internal object PushDeliveryBridge {
     var externalIdProvider: () -> String? = { null }
     var apiClientProvider: () -> ApiClient? = { null }

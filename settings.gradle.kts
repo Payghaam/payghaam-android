@@ -24,5 +24,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "engagekaro-android"
-include(":engagekaro")
+rootProject.name = "payghaam-android"
+include(":payghaam")

@@ -1,9 +1,9 @@
-package com.engagekaro.sdk
+package com.payghaam.sdk
 
 /**
  * SDK configuration — use an SDK-type API key from the dashboard (not REST).
  */
-data class EngageKaroConfig(
+data class PayghaamConfig(
     val appId: String,
     val apiKey: String,
     val baseUrl: String,
@@ -25,5 +25,5 @@ enum class SubscriptionType(val wire: String) {
     SMS("SMS"),
 }
 
-class EngageKaroApiException(val statusCode: Int, val body: String) :
-    Exception("EngageKaroApiException($statusCode): $body")
+class PayghaamApiException(val statusCode: Int, val body: String) :
+    Exception("PayghaamApiException($statusCode): $body")

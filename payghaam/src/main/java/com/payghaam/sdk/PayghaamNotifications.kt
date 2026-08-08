@@ -1,4 +1,4 @@
-package com.engagekaro.sdk
+package com.payghaam.sdk
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -17,7 +17,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Renders EngageKaro pushes and routes taps.
+ * Renders Payghaam pushes and routes taps.
  *
  * Android pushes are sent data-only (see PushFcmStrategy) so this builder runs in
  * every app state rather than letting FCM draw the tray notification when the app
@@ -30,14 +30,14 @@ import java.net.URL
  * just to deliver the message, the host app has not registered its handler yet, so
  * we would auto-open every time and rob the app of its routing.
  */
-internal object EngagekaroNotifications {
+internal object PayghaamNotifications {
     const val KEY_MESSAGE_ID = "ek_message_id"
     const val KEY_URL = "ek_url"
     const val KEY_SOUND = "ek_sound"
     const val KEY_IMAGE = "ek_image"
     const val KEY_OPENED = "ek_opened"
 
-    private const val CHANNEL_ID = "engagekaro_default"
+    private const val CHANNEL_ID = "payghaam_default"
     private const val CHANNEL_NAME = "Notifications"
     private const val IMAGE_TIMEOUT_MS = 5_000
 
@@ -164,7 +164,7 @@ internal object EngagekaroNotifications {
             .hashCode()
 
     /**
-     * Pulls an EngageKaro payload out of a tap intent, or null if this intent did not
+     * Pulls an Payghaam payload out of a tap intent, or null if this intent did not
      * come from one of our notifications. Clears the marker so a config change or a
      * resume does not re-dispatch the same tap.
      */
