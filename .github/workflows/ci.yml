@@ -21,6 +21,8 @@ jobs:
       # reproducible, verified wrapper too).
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.9"
+          # 8.9 is too old for AGP 8.9.1 (needs Gradle >= 8.11.1) — this bit
+          # the demo apps earlier too. 8.12 is what's confirmed working there.
+          gradle-version: "8.12"
       - run: echo "sdk.dir=$ANDROID_HOME" > local.properties
       - run: gradle :payghaam:assembleDebug :payghaam:testDebugUnitTest
