@@ -17,6 +17,18 @@ jobs:
         with:
           gradle-version: "8.12"
       - run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+      # TEMPORARY debug step — remove once signing works. Prints only a byte
+      # count (not the secret itself) so we can confirm the key is actually
+      # reaching this job with the expected length, rather than being empty,
+      # truncated, or masked away by something upstream.
+      - run: |
+          echo "signingInMemoryKey length: ${#ORG_GRADLE_PROJECT_signingInMemoryKey}"
+          echo "signingInMemoryKeyId: '${ORG_GRADLE_PROJECT_signingInMemoryKeyId}'"
+          echo "signingInMemoryKeyPassword length: ${#ORG_GRADLE_PROJECT_signingInMemoryKeyPassword}"
+        env:
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_IN_MEMORY_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.SIGNING_IN_MEMORY_KEY_ID }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
       # Secrets required in this repo's Settings -> Secrets and variables ->
       # Actions (see RELEASING.md for how to get each one):
       #   MAVEN_CENTRAL_USERNAME, MAVEN_CENTRAL_PASSWORD  — Central Portal user token
