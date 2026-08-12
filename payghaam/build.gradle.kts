@@ -19,7 +19,7 @@ plugins {
 // module via a Gradle composite build (local dev) or Maven Central (published)
 // without knowing its local file path.
 group = "com.payghaam"
-version = "0.1.0"
+version = "0.1.7"
 
 android {
     namespace = "com.payghaam.sdk"

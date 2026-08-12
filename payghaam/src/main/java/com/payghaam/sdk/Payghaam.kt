@@ -341,14 +341,22 @@ object Payghaam {
         identityHash: String? = null,
     ) {
         val ctx = context.applicationContext
+        val trimmedKey = apiKey.trim()
+        val trimmedBase = baseUrl.trim()
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().apply {
-            putString(KEY_CFG_API_KEY, apiKey)
-            putString(KEY_CFG_BASE_URL, baseUrl)
+            putString(KEY_CFG_API_KEY, trimmedKey)
+            putString(KEY_CFG_BASE_URL, trimmedBase)
             if (externalId != null) putString(KEY_EXTERNAL_ID, externalId)
         }.apply()
 
-        if (!isInitialized) {
-            setupCore(ctx, PayghaamConfig(appId = "", apiKey = apiKey, baseUrl = baseUrl))
+        // Rebind whenever key/baseUrl actually changed, not just on first call —
+        // the process can outlive a single init (e.g. Flutter hot restart).
+        val needsCore =
+            !isInitialized ||
+                config.apiKey != trimmedKey ||
+                config.baseUrl != trimmedBase
+        if (needsCore) {
+            setupCore(ctx, PayghaamConfig(appId = "", apiKey = trimmedKey, baseUrl = trimmedBase))
         }
         if (externalId != null) this.externalId = externalId
         if (identityHash != null) api.identityHash = identityHash
