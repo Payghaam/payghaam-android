@@ -33,6 +33,7 @@ import kotlinx.coroutines.withContext
  */
 object Payghaam {
     private lateinit var appContext: Context
+    private lateinit var store: PayghaamStore
     private lateinit var config: PayghaamConfig
     private lateinit var api: ApiClient
 
@@ -96,14 +97,14 @@ object Payghaam {
      */
     private fun setupCore(context: Context, cfg: PayghaamConfig) {
         appContext = context.applicationContext
+        store = PayghaamStore(appContext)
         config = cfg
         api = ApiClient(cfg)
-        api.queue = OfflineQueue(appContext) { method, path, body ->
+        api.queue = OfflineQueue(appContext, store) { method, path, body ->
             api.rawRequest(method, path, body)
         }
         consentGiven = !cfg.requireConsent
-        externalId = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_EXTERNAL_ID, null)
+        externalId = store.getExternalIdSync()
         PushDeliveryBridge.externalIdProvider = { externalId }
         PushDeliveryBridge.apiClientProvider = { if (canSend) api else null }
     }
@@ -235,8 +236,7 @@ object Payghaam {
     suspend fun login(externalId: String, identityHash: String? = null) {
         this.externalId = externalId
         api.identityHash = identityHash
-        appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(KEY_EXTERNAL_ID, externalId).apply()
+        store.setExternalId(externalId)
         if (!canSend) return
         scope.launch { runPostLoginTasks() }
     }
@@ -248,8 +248,7 @@ object Payghaam {
         }
         externalId = null
         api.identityHash = null
-        appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().remove(KEY_EXTERNAL_ID).apply()
+        store.clearExternalId()
     }
 
     suspend fun trackEvent(name: String, properties: Map<String, Any?>? = null) {
@@ -381,11 +380,10 @@ object Payghaam {
         val ctx = context.applicationContext
         val trimmedKey = apiKey.trim()
         val trimmedBase = baseUrl.trim()
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().apply {
-            putString(KEY_CFG_API_KEY, trimmedKey)
-            putString(KEY_CFG_BASE_URL, trimmedBase)
-            if (externalId != null) putString(KEY_EXTERNAL_ID, externalId)
-        }.apply()
+        val bridgeStore = if (this::store.isInitialized) store else PayghaamStore(ctx)
+        scope.launch {
+            bridgeStore.setBridgeConfig(trimmedKey, trimmedBase, externalId)
+        }
 
         // Rebind whenever key/baseUrl actually changed, not just on first call —
         // the process can outlive a single init (e.g. Flutter hot restart).
@@ -409,9 +407,9 @@ object Payghaam {
     fun restoreIfNeeded(context: Context): Boolean {
         if (isInitialized) return true
         val ctx = context.applicationContext
-        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val apiKey = prefs.getString(KEY_CFG_API_KEY, null) ?: return false
-        val baseUrl = prefs.getString(KEY_CFG_BASE_URL, null) ?: return false
+        val bridgeStore = if (this::store.isInitialized) store else PayghaamStore(ctx)
+        val (apiKey, baseUrl) = bridgeStore.getBridgeConfigSync()
+        if (apiKey == null || baseUrl == null) return false
         setupCore(ctx, PayghaamConfig(appId = "", apiKey = apiKey, baseUrl = baseUrl))
         return true
     }
@@ -424,8 +422,8 @@ object Payghaam {
     fun clearBridgeIdentity(context: Context) {
         externalId = null
         if (this::api.isInitialized) api.identityHash = null
-        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().remove(KEY_EXTERNAL_ID).apply()
+        val bridgeStore = if (this::store.isInitialized) store else PayghaamStore(context.applicationContext)
+        scope.launch { bridgeStore.clearExternalId() }
     }
 
     // ── Cross-platform wrapper support: raw API pass-through ───────────────────
@@ -494,11 +492,6 @@ object Payghaam {
         }
         onMessageReceivedHook?.invoke(message.data)
     }
-
-    private const val PREFS = "payghaam_sdk"
-    private const val KEY_EXTERNAL_ID = "external_id"
-    private const val KEY_CFG_API_KEY = "cfg_api_key"
-    private const val KEY_CFG_BASE_URL = "cfg_base_url"
 }
 
 /** Hooks used by [PayghaamFirebaseMessagingService] for receipts. */

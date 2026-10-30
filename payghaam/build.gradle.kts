@@ -50,6 +50,11 @@ dependencies {
     // 'google'"/'FirebaseMessaging'` etc. at compile time).
     api("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     api("com.google.firebase:firebase-messaging:24.0.0")
+    api("androidx.datastore:datastore-preferences:1.1.1")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+    testImplementation("org.json:json:20240303")
     // NOTE: do NOT exclude com.google.android.gms:play-services-stats here. It
     // was excluded briefly to dodge an androidx.legacy resolution failure that
     // was actually caused by a missing `android.useAndroidX=true` (now set in

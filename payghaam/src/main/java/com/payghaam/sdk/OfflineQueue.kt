@@ -2,6 +2,9 @@ package com.payghaam.sdk
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -9,20 +12,25 @@ import java.io.IOException
 /**
  * Persistent offline queue for fire-and-forget SDK calls (events, tags,
  * receipts, subscriptions). Calls that fail with a retryable error (network,
- * timeout, 5xx) are parked in SharedPreferences and drained FIFO on the next
+ * timeout, 5xx) are parked in Jetpack DataStore and drained FIFO on the next
  * app-foreground / successful send — offline activity is no longer lost.
  */
 internal class OfflineQueue(
     context: Context,
+    private val store: PayghaamStore,
     private val sender: (method: String, path: String, body: JSONObject) -> Unit,
 ) {
-    private val prefs = context.getSharedPreferences("payghaam_queue", Context.MODE_PRIVATE)
+    constructor(
+        context: Context,
+        sender: (method: String, path: String, body: JSONObject) -> Unit,
+    ) : this(context, PayghaamStore(context), sender)
+
+    private val scope = CoroutineScope(Dispatchers.IO)
 
     @Volatile
     private var flushing = false
 
     companion object {
-        private const val KEY = "queue_v1"
         private const val MAX_QUEUE = 200
         private const val MAX_AGE_MS = 7L * 24 * 3600 * 1000
 
@@ -37,7 +45,7 @@ internal class OfflineQueue(
 
     @Synchronized
     private fun load(): MutableList<JSONObject> {
-        val raw = prefs.getString(KEY, null) ?: return mutableListOf()
+        val raw = store.getQueueRawSync() ?: return mutableListOf()
         return try {
             val arr = JSONArray(raw)
             val cutoff = System.currentTimeMillis() - MAX_AGE_MS
@@ -53,7 +61,10 @@ internal class OfflineQueue(
     private fun save(ops: List<JSONObject>) {
         val arr = JSONArray()
         ops.forEach { arr.put(it) }
-        prefs.edit().putString(KEY, arr.toString()).apply()
+        val raw = arr.toString()
+        scope.launch {
+            store.setQueueRaw(raw)
+        }
     }
 
     @Synchronized
