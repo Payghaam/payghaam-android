@@ -19,11 +19,14 @@ plugins {
 // module via a Gradle composite build (local dev) or Maven Central (published)
 // without knowing its local file path.
 group = "com.payghaam"
-version = "0.1.7"
+version = "0.1.8"
 
 android {
     namespace = "com.payghaam.sdk"
-    compileSdk = 34
+    // 36 for Notification.ProgressStyle (Live Updates). Compiling against it
+    // does not raise the runtime floor — minSdk stays 21 and every ProgressStyle
+    // call site is guarded by a SDK_INT check with a plain-notification fallback.
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 21
