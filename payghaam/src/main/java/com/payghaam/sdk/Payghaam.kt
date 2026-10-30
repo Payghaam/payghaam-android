@@ -11,7 +11,9 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
@@ -40,6 +42,9 @@ object Payghaam {
     private val sessions = SessionTracker()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var startedActivities = 0
+    private val pendingTags = mutableMapOf<String, Any?>()
+    private var tagDebounceJob: Job? = null
+    private val tagLock = Any()
 
     /**
      * Invoked when the user taps a notification, with the full push payload —
@@ -237,6 +242,10 @@ object Payghaam {
     }
 
     suspend fun logout() {
+        val currentId = externalId
+        if (currentId != null) {
+            executeFlushTags(currentId)
+        }
         externalId = null
         api.identityHash = null
         appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -253,7 +262,36 @@ object Payghaam {
     suspend fun addTags(tags: Map<String, Any?>) {
         if (!canSend) return
         val id = externalId ?: error("Call login() first")
-        api.updateTags(id, tags)
+        synchronized(tagLock) {
+            pendingTags.putAll(tags)
+            tagDebounceJob?.cancel()
+            tagDebounceJob = scope.launch {
+                delay(300)
+                executeFlushTags(id)
+            }
+        }
+    }
+
+    /** Flushes any queued/debounced tags immediately. */
+    suspend fun flushTags() {
+        val id = externalId ?: return
+        executeFlushTags(id)
+    }
+
+    private suspend fun executeFlushTags(id: String) {
+        val snapshot: Map<String, Any?>
+        synchronized(tagLock) {
+            tagDebounceJob?.cancel()
+            tagDebounceJob = null
+            if (pendingTags.isEmpty()) return
+            snapshot = HashMap(pendingTags)
+            pendingTags.clear()
+        }
+        try {
+            api.updateTags(id, snapshot)
+        } catch (_: Throwable) {
+            // ApiClient.sendOrQueue automatically delegates retryable errors to OfflineQueue
+        }
     }
 
     suspend fun addEmail(email: String) {
