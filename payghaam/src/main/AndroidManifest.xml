@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Live Updates (Android 16+): required for a notification to be promoted
+         to the status bar / lock screen chip. Not a runtime permission — there
+         is nothing to request; without it the notification still posts, it just
+         never gets promoted. Declared here so host apps inherit it via manifest
+         merge rather than having to know about it. -->
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <application>
         <service
             android:name=".PayghaamFirebaseMessagingService"
