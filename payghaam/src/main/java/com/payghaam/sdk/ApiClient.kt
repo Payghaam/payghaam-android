@@ -55,7 +55,8 @@ internal class ApiClient(private val config: PayghaamConfig) {
         deviceModel: String? = null,
         deviceOs: String? = null,
         appVersion: String? = null,
-    ): JSONObject = post("/users/$externalId/subscriptions", JSONObject().apply {
+    ): JSONObject = post("/subscriptions", JSONObject().apply {
+        put("externalId", externalId)
         put("type", type.wire)
         put("token", token)
         deviceModel?.let { put("deviceModel", it) }
@@ -64,7 +65,10 @@ internal class ApiClient(private val config: PayghaamConfig) {
     })
 
     fun updateTags(externalId: String, tags: Map<String, Any?>): JSONObject =
-        put("/users/$externalId/tags", JSONObject().apply { put("tags", JSONObject(tags)) })
+        put("/tags", JSONObject().apply {
+            put("externalId", externalId)
+            put("tags", JSONObject(tags))
+        })
 
     fun reportReceipt(
         messageId: String,
