@@ -53,4 +53,16 @@ class AnonymousTrackingTest {
         }
         assertEquals("ar", map["language"])
     }
+
+    @Test
+    fun testRemoveSubscriptionPayload() {
+        val json = JSONObject().apply {
+            put("type", SubscriptionType.SMS.wire)
+            put("token", "+97412345678")
+            put("anonymousId", "anon_999")
+        }
+        assertEquals("SMS", json.getString("type"))
+        assertEquals("+97412345678", json.getString("token"))
+        assertEquals("anon_999", json.getString("anonymousId"))
+    }
 }

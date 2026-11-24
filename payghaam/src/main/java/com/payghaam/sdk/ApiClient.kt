@@ -78,6 +78,18 @@ internal class ApiClient(private val config: PayghaamConfig) {
         appVersion?.let { put("appVersion", it) }
     })
 
+    fun removeSubscription(
+        externalId: String? = null,
+        anonymousId: String? = null,
+        type: SubscriptionType,
+        token: String,
+    ): JSONObject = post("/subscriptions/remove", JSONObject().apply {
+        externalId?.let { put("externalId", it) }
+        anonymousId?.let { put("anonymousId", it) }
+        put("type", type.wire)
+        put("token", token)
+    })
+
     fun updateTags(
         externalId: String? = null,
         anonymousId: String? = null,

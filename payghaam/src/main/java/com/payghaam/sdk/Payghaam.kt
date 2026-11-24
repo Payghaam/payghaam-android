@@ -350,6 +350,16 @@ object Payghaam {
         api.addSubscription(externalId, anonymousId, SubscriptionType.SMS, phoneE164)
     }
 
+    suspend fun removeEmail(email: String) {
+        if (!canSend) return
+        api.removeSubscription(externalId, anonymousId, SubscriptionType.EMAIL, email)
+    }
+
+    suspend fun removeSms(phoneE164: String) {
+        if (!canSend) return
+        api.removeSubscription(externalId, anonymousId, SubscriptionType.SMS, phoneE164)
+    }
+
     /** Returns true if notification permission is granted (or not required on API < 33). */
     fun hasPushPermission(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
@@ -526,6 +536,11 @@ object Payghaam {
 
     suspend fun bridgeAddAliases(aliases: Map<String, String>) {
         addAliases(aliases)
+    }
+
+    suspend fun bridgeRemoveSubscription(type: SubscriptionType, token: String) {
+        if (!canSend) return
+        api.removeSubscription(externalId, anonymousId, type, token)
     }
 
     /** Drains anything the offline queue accumulated. Safe to call repeatedly. */
