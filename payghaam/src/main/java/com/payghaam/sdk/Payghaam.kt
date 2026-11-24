@@ -76,6 +76,7 @@ object Payghaam {
         }
 
     private var pendingOpened: Map<String, String>? = null
+    private var currentToken: String? = null
 
     val isInitialized: Boolean
         get() = this::config.isInitialized
@@ -271,6 +272,8 @@ object Payghaam {
     }
 
     fun getAnonymousId(): String = anonymousId
+    fun getExternalId(): String? = externalId
+    fun getPushToken(): String? = currentToken
 
     suspend fun setLanguage(language: String?) {
         languageOverride = language
@@ -298,12 +301,43 @@ object Payghaam {
         api.addAliases(externalId, anonymousId, aliases)
     }
 
+    suspend fun removeAlias(label: String) {
+        removeAliases(listOf(label))
+    }
+
+    suspend fun removeAliases(labels: List<String>) {
+        if (!canSend) return
+        for (label in labels) {
+            api.removeAlias(externalId, anonymousId, label)
+        }
+    }
+
     suspend fun trackEvent(name: String, properties: Map<String, Any?>? = null) {
         if (!canSend) return
         api.track(name, externalId, anonymousId, properties)
     }
 
     suspend fun addTag(key: String, value: Any) = addTags(mapOf(key to value))
+
+    suspend fun removeTag(key: String) = removeTags(listOf(key))
+
+    suspend fun removeTags(keys: List<String>) {
+        if (!canSend) return
+        val nullMap = keys.associateWith { null }
+        addTags(nullMap)
+    }
+
+    suspend fun optOut() {
+        if (!canSend) return
+        val token = currentToken ?: fetchFcmToken() ?: return
+        api.optOut(SubscriptionType.ANDROID_PUSH, token)
+    }
+
+    suspend fun optIn() {
+        if (!canSend) return
+        val token = currentToken ?: fetchFcmToken() ?: return
+        api.optIn(SubscriptionType.ANDROID_PUSH, token)
+    }
 
     suspend fun addTags(tags: Map<String, Any?>) {
         if (!canSend) return
@@ -376,6 +410,7 @@ object Payghaam {
     }
 
     suspend fun registerPushToken(token: String) {
+        currentToken = token
         if (!canSend) return
         api.addSubscription(
             externalId = externalId,
@@ -536,6 +571,18 @@ object Payghaam {
 
     suspend fun bridgeAddAliases(aliases: Map<String, String>) {
         addAliases(aliases)
+    }
+
+    suspend fun bridgeRemoveAlias(label: String) {
+        removeAlias(label)
+    }
+
+    suspend fun bridgeOptOut() {
+        optOut()
+    }
+
+    suspend fun bridgeOptIn() {
+        optIn()
     }
 
     suspend fun bridgeRemoveSubscription(type: SubscriptionType, token: String) {

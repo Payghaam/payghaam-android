@@ -118,6 +118,32 @@ internal class ApiClient(private val config: PayghaamConfig) {
         put("aliases", list)
     })
 
+    fun removeAlias(
+        externalId: String? = null,
+        anonymousId: String? = null,
+        label: String,
+    ): JSONObject = post("/aliases/remove", JSONObject().apply {
+        externalId?.let { put("externalId", it) }
+        anonymousId?.let { put("anonymousId", it) }
+        put("label", label)
+    })
+
+    fun optOut(
+        type: SubscriptionType,
+        token: String,
+    ): JSONObject = post("/opt-out", JSONObject().apply {
+        put("type", type.wire)
+        put("token", token)
+    })
+
+    fun optIn(
+        type: SubscriptionType,
+        token: String,
+    ): JSONObject = post("/opt-in", JSONObject().apply {
+        put("type", type.wire)
+        put("token", token)
+    })
+
     fun reportReceipt(
         messageId: String,
         event: String,

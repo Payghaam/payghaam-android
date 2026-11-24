@@ -65,4 +65,21 @@ class AnonymousTrackingTest {
         assertEquals("+97412345678", json.getString("token"))
         assertEquals("anon_999", json.getString("anonymousId"))
     }
+
+    @Test
+    fun testRemoveAliasAndOptInOutPayloads() {
+        val removeAliasJson = JSONObject().apply {
+            put("label", "crm_id")
+            put("anonymousId", "anon_999")
+        }
+        assertEquals("crm_id", removeAliasJson.getString("label"))
+        assertEquals("anon_999", removeAliasJson.getString("anonymousId"))
+
+        val optOutJson = JSONObject().apply {
+            put("type", SubscriptionType.ANDROID_PUSH.wire)
+            put("token", "fcm_token_123")
+        }
+        assertEquals("ANDROID_PUSH", optOutJson.getString("type"))
+        assertEquals("fcm_token_123", optOutJson.getString("token"))
+    }
 }
