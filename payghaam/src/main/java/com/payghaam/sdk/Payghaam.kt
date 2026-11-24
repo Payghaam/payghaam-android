@@ -38,6 +38,8 @@ object Payghaam {
     private lateinit var api: ApiClient
 
     private var externalId: String? = null
+    private var anonymousId: String = ""
+    private var languageOverride: String? = null
     private var consentGiven = true
     private var pendingPushToken: String? = null
     private val sessions = SessionTracker()
@@ -105,6 +107,8 @@ object Payghaam {
         }
         consentGiven = !cfg.requireConsent
         externalId = store.getExternalIdSync()
+        anonymousId = store.getAnonymousIdSync()
+        languageOverride = store.getLanguageSync()
         PushDeliveryBridge.externalIdProvider = { externalId }
         PushDeliveryBridge.apiClientProvider = { if (canSend) api else null }
     }
@@ -150,15 +154,18 @@ object Payghaam {
     }
 
     private suspend fun pingDeviceContext(sessionStart: Boolean = false) {
-        if (!canSend || externalId == null) return
+        if (!canSend) return
         try {
             val countSession = sessionStart && sessions.noteForeground()
             api.identify(
-                externalId,
+                externalId = externalId,
+                anonymousId = anonymousId,
+                language = languageOverride,
                 deviceContext = DeviceContext.collect(
                     appContext,
                     sessionStart = countSession,
                     pushPermission = pushPermissionLabel(),
+                    languageOverride = languageOverride,
                 ),
             )
         } catch (_: Exception) {
@@ -238,46 +245,86 @@ object Payghaam {
         api.identityHash = identityHash
         store.setExternalId(externalId)
         if (!canSend) return
+        // Explicitly link anonymous ID with external ID on backend
+        try {
+            api.identify(
+                externalId = externalId,
+                anonymousId = anonymousId,
+                language = languageOverride,
+                deviceContext = DeviceContext.collect(
+                    appContext,
+                    sessionStart = false,
+                    pushPermission = pushPermissionLabel(),
+                    languageOverride = languageOverride,
+                ),
+            )
+        } catch (_: Exception) {}
         scope.launch { runPostLoginTasks() }
     }
 
     suspend fun logout() {
-        val currentId = externalId
-        if (currentId != null) {
-            executeFlushTags(currentId)
-        }
+        executeFlushTags(externalId, anonymousId)
         externalId = null
         api.identityHash = null
         store.clearExternalId()
+        anonymousId = store.resetAnonymousId()
+    }
+
+    fun getAnonymousId(): String = anonymousId
+
+    suspend fun setLanguage(language: String?) {
+        languageOverride = language
+        store.setLanguage(language)
+        if (!canSend) return
+        try {
+            api.identify(
+                externalId = externalId,
+                anonymousId = anonymousId,
+                language = language,
+                deviceContext = DeviceContext.collect(
+                    appContext,
+                    languageOverride = language,
+                ),
+            )
+        } catch (_: Exception) {}
+    }
+
+    suspend fun addAlias(label: String, value: String) {
+        addAliases(mapOf(label to value))
+    }
+
+    suspend fun addAliases(aliases: Map<String, String>) {
+        if (!canSend) return
+        api.addAliases(externalId, anonymousId, aliases)
     }
 
     suspend fun trackEvent(name: String, properties: Map<String, Any?>? = null) {
         if (!canSend) return
-        api.track(name, externalId, properties)
+        api.track(name, externalId, anonymousId, properties)
     }
 
     suspend fun addTag(key: String, value: Any) = addTags(mapOf(key to value))
 
     suspend fun addTags(tags: Map<String, Any?>) {
         if (!canSend) return
-        val id = externalId ?: error("Call login() first")
+        val extId = externalId
+        val anonId = anonymousId
         synchronized(tagLock) {
             pendingTags.putAll(tags)
             tagDebounceJob?.cancel()
             tagDebounceJob = scope.launch {
                 delay(300)
-                executeFlushTags(id)
+                executeFlushTags(extId, anonId)
             }
         }
     }
 
     /** Flushes any queued/debounced tags immediately. */
     suspend fun flushTags() {
-        val id = externalId ?: return
-        executeFlushTags(id)
+        executeFlushTags(externalId, anonymousId)
     }
 
-    private suspend fun executeFlushTags(id: String) {
+    private suspend fun executeFlushTags(extId: String?, anonId: String) {
         val snapshot: Map<String, Any?>
         synchronized(tagLock) {
             tagDebounceJob?.cancel()
@@ -287,7 +334,7 @@ object Payghaam {
             pendingTags.clear()
         }
         try {
-            api.updateTags(id, snapshot)
+            api.updateTags(extId, anonId, snapshot)
         } catch (_: Throwable) {
             // ApiClient.sendOrQueue automatically delegates retryable errors to OfflineQueue
         }
@@ -295,14 +342,12 @@ object Payghaam {
 
     suspend fun addEmail(email: String) {
         if (!canSend) return
-        val id = externalId ?: error("Call login() first")
-        api.addSubscription(id, SubscriptionType.EMAIL, email)
+        api.addSubscription(externalId, anonymousId, SubscriptionType.EMAIL, email)
     }
 
     suspend fun addSms(phoneE164: String) {
         if (!canSend) return
-        val id = externalId ?: error("Call login() first")
-        api.addSubscription(id, SubscriptionType.SMS, phoneE164)
+        api.addSubscription(externalId, anonymousId, SubscriptionType.SMS, phoneE164)
     }
 
     /** Returns true if notification permission is granted (or not required on API < 33). */
@@ -322,13 +367,9 @@ object Payghaam {
 
     suspend fun registerPushToken(token: String) {
         if (!canSend) return
-        val id = externalId
-        if (id == null) {
-            pendingPushToken = token
-            return
-        }
         api.addSubscription(
-            externalId = id,
+            externalId = externalId,
+            anonymousId = anonymousId,
             type = SubscriptionType.ANDROID_PUSH,
             token = token,
             deviceOs = "Android ${Build.VERSION.RELEASE}",
@@ -376,13 +417,15 @@ object Payghaam {
         baseUrl: String,
         externalId: String?,
         identityHash: String? = null,
+        anonymousId: String? = null,
+        language: String? = null,
     ) {
         val ctx = context.applicationContext
         val trimmedKey = apiKey.trim()
         val trimmedBase = baseUrl.trim()
         val bridgeStore = if (this::store.isInitialized) store else PayghaamStore(ctx)
         scope.launch {
-            bridgeStore.setBridgeConfig(trimmedKey, trimmedBase, externalId)
+            bridgeStore.setBridgeConfig(trimmedKey, trimmedBase, externalId, anonymousId, language)
         }
 
         // Rebind whenever key/baseUrl actually changed, not just on first call —
@@ -396,6 +439,8 @@ object Payghaam {
         }
         if (externalId != null) this.externalId = externalId
         if (identityHash != null) api.identityHash = identityHash
+        if (!anonymousId.isNullOrEmpty()) this.anonymousId = anonymousId
+        if (language != null) this.languageOverride = language
     }
 
     /**
@@ -423,7 +468,10 @@ object Payghaam {
         externalId = null
         if (this::api.isInitialized) api.identityHash = null
         val bridgeStore = if (this::store.isInitialized) store else PayghaamStore(context.applicationContext)
-        scope.launch { bridgeStore.clearExternalId() }
+        scope.launch {
+            bridgeStore.clearExternalId()
+            anonymousId = bridgeStore.resetAnonymousId()
+        }
     }
 
     // ── Cross-platform wrapper support: raw API pass-through ───────────────────
@@ -440,7 +488,14 @@ object Payghaam {
     /** Raw identify call — the wrapper's own device-context snapshot goes in [deviceContext]. */
     suspend fun bridgeIdentify(deviceContext: Map<String, Any?>? = null) {
         if (!canSend) return
-        withContext(Dispatchers.IO) { api.identify(externalId, deviceContext = deviceContext) }
+        withContext(Dispatchers.IO) {
+            api.identify(
+                externalId = externalId,
+                anonymousId = anonymousId,
+                language = languageOverride,
+                deviceContext = deviceContext
+            )
+        }
     }
 
     /** Generic channel subscription (push token, email, SMS) for the current user. */
@@ -452,10 +507,25 @@ object Payghaam {
         appVersion: String? = null,
     ) {
         if (!canSend) return
-        val id = externalId ?: return
         withContext(Dispatchers.IO) {
-            api.addSubscription(id, type, token, deviceModel, deviceOs, appVersion)
+            api.addSubscription(
+                externalId = externalId,
+                anonymousId = anonymousId,
+                type = type,
+                token = token,
+                deviceModel = deviceModel,
+                deviceOs = deviceOs,
+                appVersion = appVersion
+            )
         }
+    }
+
+    suspend fun bridgeSetLanguage(language: String?) {
+        setLanguage(language)
+    }
+
+    suspend fun bridgeAddAliases(aliases: Map<String, String>) {
+        addAliases(aliases)
     }
 
     /** Drains anything the offline queue accumulated. Safe to call repeatedly. */

@@ -11,6 +11,7 @@ internal object DeviceContext {
         context: Context,
         sessionStart: Boolean = false,
         pushPermission: String? = null,
+        languageOverride: String? = null,
     ): Map<String, Any?> {
         val locale = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             context.resources.configuration.locales[0]
@@ -25,7 +26,7 @@ internal object DeviceContext {
         }
         return buildMap {
             put("country", locale.country)
-            put("language", locale.language)
+            put("language", languageOverride ?: locale.language)
             put("timezone", TimeZone.getDefault().id)
             put("os", "Android")
             put("osVersion", Build.VERSION.RELEASE)

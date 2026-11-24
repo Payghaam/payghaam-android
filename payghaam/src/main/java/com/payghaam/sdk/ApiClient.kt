@@ -23,11 +23,21 @@ internal class ApiClient(private val config: PayghaamConfig) {
     }
 
     fun identify(
-        externalId: String?,
+        externalId: String? = null,
+        anonymousId: String? = null,
+        language: String? = null,
+        aliases: List<Map<String, String>>? = null,
         tags: Map<String, Any?>? = null,
         deviceContext: Map<String, Any?>? = null,
     ): JSONObject = post("/users", JSONObject().apply {
         externalId?.let { put("externalId", it) }
+        anonymousId?.let { put("anonymousId", it) }
+        language?.let { put("language", it) }
+        aliases?.let {
+            val list = JSONArray()
+            it.forEach { item -> list.put(JSONObject(item)) }
+            put("aliases", list)
+        }
         tags?.let { put("tags", JSONObject(it)) }
         deviceContext?.forEach { (k, v) ->
             if (v != null) put(k, v)
@@ -36,12 +46,14 @@ internal class ApiClient(private val config: PayghaamConfig) {
 
     fun track(
         name: String,
-        externalId: String?,
+        externalId: String? = null,
+        anonymousId: String? = null,
         properties: Map<String, Any?>? = null,
         deviceContext: Map<String, Any?>? = null,
     ): JSONObject = post("/events", JSONObject().apply {
         put("name", name)
         externalId?.let { put("externalId", it) }
+        anonymousId?.let { put("anonymousId", it) }
         properties?.let { put("properties", JSONObject(it)) }
         deviceContext?.forEach { (k, v) ->
             if (v != null) put(k, v)
@@ -49,14 +61,16 @@ internal class ApiClient(private val config: PayghaamConfig) {
     })
 
     fun addSubscription(
-        externalId: String,
+        externalId: String? = null,
+        anonymousId: String? = null,
         type: SubscriptionType,
         token: String,
         deviceModel: String? = null,
         deviceOs: String? = null,
         appVersion: String? = null,
     ): JSONObject = post("/subscriptions", JSONObject().apply {
-        put("externalId", externalId)
+        externalId?.let { put("externalId", it) }
+        anonymousId?.let { put("anonymousId", it) }
         put("type", type.wire)
         put("token", token)
         deviceModel?.let { put("deviceModel", it) }
@@ -64,11 +78,33 @@ internal class ApiClient(private val config: PayghaamConfig) {
         appVersion?.let { put("appVersion", it) }
     })
 
-    fun updateTags(externalId: String, tags: Map<String, Any?>): JSONObject =
+    fun updateTags(
+        externalId: String? = null,
+        anonymousId: String? = null,
+        tags: Map<String, Any?>
+    ): JSONObject =
         put("/tags", JSONObject().apply {
-            put("externalId", externalId)
+            externalId?.let { put("externalId", it) }
+            anonymousId?.let { put("anonymousId", it) }
             put("tags", JSONObject(tags))
         })
+
+    fun addAliases(
+        externalId: String? = null,
+        anonymousId: String? = null,
+        aliases: Map<String, String>,
+    ): JSONObject = post("/users", JSONObject().apply {
+        externalId?.let { put("externalId", it) }
+        anonymousId?.let { put("anonymousId", it) }
+        val list = JSONArray()
+        aliases.forEach { (k, v) ->
+            list.put(JSONObject().apply {
+                put("label", k)
+                put("value", v)
+            })
+        }
+        put("aliases", list)
+    })
 
     fun reportReceipt(
         messageId: String,
