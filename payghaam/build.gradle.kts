@@ -75,7 +75,10 @@ dependencies {
 // ORG_GRADLE_PROJECT_signingInMemoryKeyPassword automatically — nothing else
 // needed here for credentials.
 mavenPublishing {
-    publishToMavenCentral()
+    // The default leaves the upload in the Central Portal until someone
+    // presses Publish. 0.1.8 and 0.1.9 did that: the workflow went green and
+    // Maven Central stayed on 0.1.7. automaticRelease closes that gap.
+    publishToMavenCentral(automaticRelease = true)
     signAllPublications()
 
     coordinates("com.payghaam", "payghaam", version.toString())
